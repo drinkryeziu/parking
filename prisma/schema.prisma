@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  phone     String?
+  password  String
+  createdAt DateTime @default(now())
+  bookings  Booking[]
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  userId        String?
+  user          User?         @relation(fields: [userId], references: [id])
+
+  // Driver info
+  firstName     String
+  lastName      String
+  phone         String
+  email         String
+  companyName   String
+
+  // Trailer info
+  trailerType   String
+  trailerNumber String
+  licensePlate  String
+
+  // Reservation
+  startDate     DateTime
+  endDate       DateTime
+  totalAmount   Int           // in cents
+
+  // Payment — method name only, no card data
+  paymentMethod String        // "credit" | "debit" | "venmo" | "cashapp" | "zelle"
+  paymentStatus String        @default("pending") // "pending" | "paid"
+  stripePaymentIntentId String?
+
+  // Notifications
+  smsConfirmation Boolean @default(true)
+  emailInvoice    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+}
