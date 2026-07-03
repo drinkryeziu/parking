@@ -6,7 +6,30 @@ import paymentRoutes from "./routes/payments";
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
+// Allow localhost (dev), any explicitly configured CLIENT_URL(s),
+// and any *.vercel.app deployment so the frontend keeps working
+// even when Vercel changes the preview/production URL.
+const allowedOrigins = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Non-browser requests (curl, health checks) have no origin.
+      if (!origin) return callback(null, true);
+      if (
+        origin.startsWith("http://localhost") ||
+        origin.endsWith(".vercel.app") ||
+        allowedOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
