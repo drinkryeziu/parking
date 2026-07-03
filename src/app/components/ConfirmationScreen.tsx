@@ -9,6 +9,7 @@ interface Props {
     endDate?: string;
     endTime?: string;
   };
+  onNewBooking?: () => void;
 }
 
 const CODE = "5698";

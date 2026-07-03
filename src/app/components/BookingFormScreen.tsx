@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, Calendar, Clock, ArrowLeft, MapPin } from "lucide-react";
+import { api } from "../../lib/api";
+import { AuthUser } from "../../lib/auth";
 
 interface BookingData {
   firstName: string;
@@ -20,7 +22,9 @@ interface BookingData {
 
 interface Props {
   onBack: () => void;
-  onContinue: (data: BookingData) => void;
+  onContinue: (data: BookingData, bookingId: string) => void;
+  authUser?: AuthUser | null;
+  token?: string | null;
 }
 
 type ErrorMap = Partial<Record<keyof BookingData, string>>;
@@ -90,12 +94,15 @@ function inputClass(error?: string) {
   }`;
 }
 
-export function BookingFormScreen({ onBack, onContinue }: Props) {
+export function BookingFormScreen({ onBack, onContinue, authUser, token }: Props) {
+  const [submittingApi, setSubmittingApi] = useState(false);
+  const [apiError, setApiError] = useState("");
+
   const [data, setData] = useState<BookingData>({
-    firstName: "",
-    lastName: "",
+    firstName: authUser?.firstName || "",
+    lastName: authUser?.lastName || "",
     phone: "",
-    email: "",
+    email: authUser?.email || "",
     companyName: "",
     trailerType: "",
     trailerNumber: "",
@@ -119,16 +126,30 @@ export function BookingFormScreen({ onBack, onContinue }: Props) {
 
   const summary = calcSummary(data.startDate, data.startTime, data.endDate, data.endTime);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     setSubmitted(true);
     const e = validate(data);
     setErrors(e);
     if (Object.keys(e).length > 0) {
-      // Scroll to top to show first error
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    onContinue(data);
+    setSubmittingApi(true);
+    setApiError("");
+    try {
+      const summary = calcSummary(data.startDate, data.startTime, data.endDate, data.endTime);
+      const result = await api.post("/api/bookings", {
+        ...data,
+        startDate: `${data.startDate}T${data.startTime}`,
+        endDate: `${data.endDate}T${data.endTime}`,
+        totalAmount: summary?.total ?? 150,
+        paymentMethod: "pending",
+      }, token ?? undefined);
+      onContinue(data, result.bookingId);
+    } catch (err: any) {
+      setApiError(err.message || "Failed to save booking");
+      setSubmittingApi(false);
+    }
   };
 
   return (
@@ -400,12 +421,23 @@ export function BookingFormScreen({ onBack, onContinue }: Props) {
 
       {/* CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4" style={{ maxWidth: "480px", margin: "0 auto" }}>
+        {apiError && (
+          <div className="mb-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2">
+            <p className="text-red-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px" }}>{apiError}</p>
+          </div>
+        )}
         <button
           onClick={handleContinue}
-          className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98]"
+          disabled={submittingApi}
+          className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70"
           style={{ background: "#007AFF", fontFamily: "'Inter', sans-serif", fontSize: "16px", fontWeight: 700 }}
         >
-          Continue
+          {submittingApi ? (
+            <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+          ) : "Continue"}
         </button>
       </div>
     </div>

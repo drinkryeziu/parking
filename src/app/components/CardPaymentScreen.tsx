@@ -6,6 +6,8 @@ interface Props {
   onPay: () => void;
   total: number;
   type: "credit" | "debit";
+  bookingId?: string | null;
+  token?: string | null;
 }
 
 function formatCardNumber(value: string) {

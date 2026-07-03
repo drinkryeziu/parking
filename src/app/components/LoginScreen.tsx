@@ -1,16 +1,51 @@
 import { useState } from "react";
 import { Eye, EyeOff, Truck } from "lucide-react";
+import { useGoogleLogin } from "@react-oauth/google";
+import { api } from "../../lib/api";
+import { AuthUser } from "../../lib/auth";
 
 interface Props {
-  onLogin: () => void;
+  onAuthSuccess: (token: string, user: AuthUser) => void;
   onGuest: () => void;
   onCreateAccount: () => void;
 }
 
-export function LoginScreen({ onLogin, onGuest, onCreateAccount }: Props) {
+export function LoginScreen({ onAuthSuccess, onGuest, onCreateAccount }: Props) {
   const [showPassword, setShowPassword] = useState(false);
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    if (!email || !password) { setError("Please enter your email and password"); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api.post("/api/auth/login", { email, password });
+      onAuthSuccess(data.token, data.user);
+    } catch (e: any) {
+      setError(e.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const googleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api.post("/api/auth/google-access-token", { accessToken: tokenResponse.access_token });
+        onAuthSuccess(data.token, data.user);
+      } catch (e: any) {
+        setError(e.message || "Google sign-in failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    onError: () => setError("Google sign-in was cancelled"),
+  });
 
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: "linear-gradient(160deg, #024ad8 0%, #0133a0 60%, #01257a 100%)" }}>
@@ -31,13 +66,21 @@ export function LoginScreen({ onLogin, onGuest, onCreateAccount }: Props) {
       <div className="flex-1 mx-4 mb-6 bg-white rounded-3xl px-6 py-8 shadow-2xl flex flex-col gap-5">
         <h2 className="text-gray-900 mb-1" style={{ fontFamily: "'Inter', sans-serif", fontSize: "22px", fontWeight: 700 }}>Sign In</h2>
 
-        {/* Username */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <p className="text-red-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px" }}>{error}</p>
+          </div>
+        )}
+
+        {/* Email */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-gray-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px", fontWeight: 600, letterSpacing: "0.02em" }}>USERNAME</label>
+          <label className="text-gray-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px", fontWeight: 600, letterSpacing: "0.02em" }}>EMAIL</label>
           <input
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            placeholder="Enter your username"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="Enter your email"
+            type="email"
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
             className="w-full h-14 px-4 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
             style={{ fontFamily: "'Inter', sans-serif", fontSize: "16px" }}
           />
@@ -52,6 +95,7 @@ export function LoginScreen({ onLogin, onGuest, onCreateAccount }: Props) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="Enter your password"
+              onKeyDown={e => e.key === "Enter" && handleLogin()}
               className="w-full h-14 px-4 pr-12 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
               style={{ fontFamily: "'Inter', sans-serif", fontSize: "16px" }}
             />
@@ -59,18 +103,21 @@ export function LoginScreen({ onLogin, onGuest, onCreateAccount }: Props) {
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
-          <div className="flex justify-end">
-            <button className="text-blue-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px", fontWeight: 500 }}>Forgot Password?</button>
-          </div>
         </div>
 
         {/* Sign In */}
         <button
-          onClick={onLogin}
-          className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98]"
+          onClick={handleLogin}
+          disabled={loading}
+          className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70"
           style={{ background: "#024ad8", fontFamily: "'Inter', sans-serif", fontSize: "16px", fontWeight: 700 }}
         >
-          Sign In
+          {loading ? (
+            <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+          ) : "Sign In"}
         </button>
 
         {/* Divider */}
@@ -82,8 +129,9 @@ export function LoginScreen({ onLogin, onGuest, onCreateAccount }: Props) {
 
         {/* Google */}
         <button
-          onClick={onLogin}
-          className="w-full h-14 rounded-xl border border-gray-200 bg-white flex items-center justify-center gap-3 active:bg-gray-50 transition-all"
+          onClick={() => googleLogin()}
+          disabled={loading}
+          className="w-full h-14 rounded-xl border border-gray-200 bg-white flex items-center justify-center gap-3 active:bg-gray-50 transition-all disabled:opacity-70"
           style={{ fontFamily: "'Inter', sans-serif", fontSize: "15px", fontWeight: 600, color: "#333" }}
         >
           <svg width="20" height="20" viewBox="0 0 24 24">

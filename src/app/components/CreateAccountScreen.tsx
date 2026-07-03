@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { ArrowLeft, Eye, EyeOff, Truck, CheckCircle, User, Mail, Phone, Lock, CreditCard, Plus, X } from "lucide-react";
+import { api } from "../../lib/api";
+import { AuthUser } from "../../lib/auth";
 
 interface Props {
   onBack: () => void;
-  onSuccess: () => void;
+  onAuthSuccess: (token: string, user: AuthUser) => void;
 }
 
 interface FormData {
@@ -345,7 +347,7 @@ function PaymentMethodSection() {
   );
 }
 
-export function CreateAccountScreen({ onBack, onSuccess }: Props) {
+export function CreateAccountScreen({ onBack, onAuthSuccess }: Props) {
   const [form, setForm] = useState<FormData>({
     firstName: "",
     lastName: "",
@@ -383,16 +385,29 @@ export function CreateAccountScreen({ onBack, onSuccess }: Props) {
     return e;
   };
 
-  const handleSubmit = () => {
+  const [apiError, setApiError] = useState("");
+
+  const handleSubmit = async () => {
     const e = validate();
     setErrors(e);
     if (Object.keys(e).length > 0) return;
     setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+    setApiError("");
+    try {
+      const data = await api.post("/api/auth/register", {
+        email: form.email,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        phone: form.phone,
+        password: form.password,
+      });
       setSuccess(true);
-      setTimeout(onSuccess, 1800);
-    }, 2000);
+      setTimeout(() => onAuthSuccess(data.token, data.user), 1800);
+    } catch (err: any) {
+      setApiError(err.message || "Registration failed");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (success) {
@@ -609,6 +624,11 @@ export function CreateAccountScreen({ onBack, onSuccess }: Props) {
 
       {/* CTA */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4" style={{ maxWidth: "480px", margin: "0 auto" }}>
+        {apiError && (
+          <div className="mb-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2">
+            <p className="text-red-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px" }}>{apiError}</p>
+          </div>
+        )}
         <button
           onClick={handleSubmit}
           disabled={submitting}
