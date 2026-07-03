@@ -1,13 +1,21 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import Stripe from "stripe";
 import { PrismaClient } from "@prisma/client";
 
 const router = Router();
 const prisma = new PrismaClient();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+
+function getStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key || key === "sk_test_placeholder") return null;
+  return new Stripe(key);
+}
 
 // Create a Stripe PaymentIntent — card data never touches our server
-router.post("/create-intent", async (req, res) => {
+router.post("/create-intent", async (req: Request, res: Response) => {
+  const stripe = getStripe();
+  if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
+
   const { bookingId } = req.body;
   if (!bookingId) return res.status(400).json({ error: "bookingId required" });
 
@@ -24,7 +32,10 @@ router.post("/create-intent", async (req, res) => {
 });
 
 // Stripe webhook — marks booking as paid after Stripe confirms
-router.post("/webhook", express_raw(), async (req, res) => {
+router.post("/webhook", require("express").raw({ type: "application/json" }), async (req: Request, res: Response) => {
+  const stripe = getStripe();
+  if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
+
   const sig = req.headers["stripe-signature"] as string;
   let event: Stripe.Event;
 
@@ -47,10 +58,5 @@ router.post("/webhook", express_raw(), async (req, res) => {
 
   res.json({ received: true });
 });
-
-function express_raw() {
-  const express = require("express");
-  return express.raw({ type: "application/json" });
-}
 
 export default router;

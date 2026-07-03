@@ -2,11 +2,8 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { PrismaClient } from "@prisma/client";
-import { OAuth2Client } from "google-auth-library";
-
 const router = Router();
 const prisma = new PrismaClient();
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 function makeToken(userId: string) {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: "30d" });
