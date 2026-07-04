@@ -208,17 +208,14 @@ function InvoiceModal({ onClose, bookingData }: { onClose: () => void; bookingDa
   );
 }
 
-// ── Elapsed Timer ─────────────────────────────────────────────────────────────
-function useElapsed(startDate: string, startTime: string) {
-  const [elapsed, setElapsed] = useState(0);
+// ── Live clock — ticks every second so countdowns stay current ────────────────
+function useNow(intervalMs = 1000) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const start = new Date(`${startDate}T${startTime}`).getTime();
-    const tick = () => setElapsed(Math.max(0, Date.now() - start));
-    tick();
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(id);
-  }, [startDate, startTime]);
-  return elapsed;
+  }, [intervalMs]);
+  return now;
 }
 
 function fmtElapsed(ms: number) {
@@ -265,16 +262,24 @@ function ActiveBookingScreen({ bookingData }: { bookingData: Props["bookingData"
   const endDate = d.endDate || "2026-06-15";
   const endTime = d.endTime || "12:30";
 
-  const elapsedMs = useElapsed(startDate, startTime);
-  const totalMs = new Date(`${endDate}T${endTime}`).getTime() - new Date(`${startDate}T${startTime}`).getTime();
-  const remainMs = Math.max(0, totalMs - elapsedMs);
-  const progress = Math.min(1, elapsedMs / totalMs);
+  const now = useNow();
+  const startMs = new Date(`${startDate}T${startTime}`).getTime();
+  const endMs = new Date(`${endDate}T${endTime}`).getTime();
+  const totalMs = Math.max(1, endMs - startMs);
 
-  const { d: remDays, h: remH, m: remM, s: remS } = fmtElapsed(remainMs);
-  const remainDays = Math.floor(remainMs / 86400000);
-  const remainHours = Math.floor((remainMs % 86400000) / 3600000);
-  const remainMins = Math.floor((remainMs % 3600000) / 60000);
-  const barColor = progress > 0.85 ? "#EF4444" : progress > 0.6 ? "#F97316" : "#007AFF";
+  // Three phases: before check-in (counts down to start), active (counts down
+  // to end), and ended. The countdown is always measured against the live clock.
+  const phase: "pending" | "active" | "ended" = now < startMs ? "pending" : now < endMs ? "active" : "ended";
+  const countdownMs = phase === "pending" ? startMs - now : phase === "active" ? Math.max(0, endMs - now) : 0;
+  const elapsedMs = Math.min(totalMs, Math.max(0, now - startMs));
+  const progress = Math.min(1, Math.max(0, elapsedMs / totalMs));
+
+  const { d: remDays, h: remH, m: remM, s: remS } = fmtElapsed(countdownMs);
+  const remainDays = Math.floor(countdownMs / 86400000);
+  const remainHours = Math.floor((countdownMs % 86400000) / 3600000);
+  const remainMins = Math.floor((countdownMs % 3600000) / 60000);
+  const barColor = phase === "ended" ? "#EF4444" : progress > 0.85 ? "#EF4444" : progress > 0.6 ? "#F97316" : "#007AFF";
+  const timerHeading = phase === "pending" ? "STARTS IN" : phase === "ended" ? "RESERVATION ENDED" : "TIME REMAINING";
 
   const [alerts, setAlerts] = useState<Record<string, boolean>>({ "1d": true, "6h": true, "1h": false, "30m": false });
   const [methods, setMethods] = useState<NotifMethods>(new Set<NotifMethod>(["sms"]));
@@ -282,7 +287,15 @@ function ActiveBookingScreen({ bookingData }: { bookingData: Props["bookingData"
     setMethods(prev => { const next = new Set(prev); next.has(m) ? next.delete(m) : next.add(m); return next; });
   const toggleAlert = (key: string) => setAlerts(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const remainLabel = remainDays > 0
+  const remainLabel = phase === "ended"
+    ? "Reservation ended"
+    : phase === "pending"
+    ? (remainDays > 0
+        ? `Starts in ${remainDays}d ${remainHours}h`
+        : remainHours > 0
+        ? `Starts in ${remainHours}h ${remainMins}m`
+        : `Starts in ${remainMins}m`)
+    : remainDays > 0
     ? `${remainDays}d ${remainHours}h remaining`
     : remainHours > 0
     ? `${remainHours}h ${remainMins}m remaining`
@@ -368,7 +381,7 @@ function ActiveBookingScreen({ bookingData }: { bookingData: Props["bookingData"
         {/* Remaining Timer */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-2">
-            <p className="text-gray-400 mb-3" style={{ fontFamily: "'Inter', sans-serif", fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em" }}>TIME REMAINING</p>
+            <p className="text-gray-400 mb-3" style={{ fontFamily: "'Inter', sans-serif", fontSize: "11px", fontWeight: 700, letterSpacing: "0.08em" }}>{timerHeading}</p>
             <div className="flex items-end gap-2 justify-center mb-4">
               {remDays > 0 && <><TimeBlock value={remDays} label="DAYS" /><span className="text-blue-400 pb-3" style={{ fontSize: "22px", fontWeight: 700 }}>:</span></>}
               <TimeBlock value={remH} label="HRS" />
