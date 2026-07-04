@@ -40,18 +40,29 @@ app.use("/api/profile", profileRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-// TEMP diagnostic: list actual columns on the User table
+// TEMP diagnostic: does the Prisma client know the new columns?
 app.get("/api/debug/columns", async (_req, res) => {
+  const { PrismaClient } = await import("@prisma/client");
+  const p = new PrismaClient();
+  const out: any = {};
   try {
-    const { PrismaClient } = await import("@prisma/client");
-    const p = new PrismaClient();
-    const rows = await p.$queryRawUnsafe(
+    out.dbColumns = await p.$queryRawUnsafe(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'User' ORDER BY column_name`
     );
-    res.json({ columns: rows });
+  } catch (e: any) { out.dbColumnsError = String(e?.message || e); }
+  try {
+    // Attempt the write that crashes in production, but catch the real error.
+    const anyUser = await p.user.findFirst();
+    if (anyUser) {
+      await p.user.update({ where: { id: anyUser.id }, data: { companyName: anyUser.companyName ?? "" } });
+      out.updateCompanyName = "OK — client knows the column";
+    } else {
+      out.updateCompanyName = "no users to test";
+    }
   } catch (e: any) {
-    res.status(500).json({ error: String(e?.message || e) });
+    out.updateCompanyName = "FAILED: " + String(e?.message || e).slice(0, 300);
   }
+  res.json(out);
 });
 
 const PORT = process.env.PORT || 3001;
