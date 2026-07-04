@@ -40,5 +40,19 @@ app.use("/api/profile", profileRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+// TEMP diagnostic: list actual columns on the User table
+app.get("/api/debug/columns", async (_req, res) => {
+  try {
+    const { PrismaClient } = await import("@prisma/client");
+    const p = new PrismaClient();
+    const rows = await p.$queryRawUnsafe(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'User' ORDER BY column_name`
+    );
+    res.json({ columns: rows });
+  } catch (e: any) {
+    res.status(500).json({ error: String(e?.message || e) });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
