@@ -8,7 +8,9 @@ import { VenmoPaymentScreen } from "./components/VenmoPaymentScreen";
 import { CashAppPaymentScreen } from "./components/CashAppPaymentScreen";
 import { ZellePaymentScreen } from "./components/ZellePaymentScreen";
 import { ConfirmationScreen } from "./components/ConfirmationScreen";
-import { getToken, getUser, setToken, setUser, clearToken, AuthUser } from "../lib/auth";
+import { ProfileScreen } from "./components/ProfileScreen";
+import { getToken, getUser, setToken, setUser, clearToken, AuthUser, Profile } from "../lib/auth";
+import { api } from "../lib/api";
 
 type Screen =
   | "login"
@@ -20,7 +22,8 @@ type Screen =
   | "payment-venmo"
   | "payment-cashapp"
   | "payment-zelle"
-  | "confirmation";
+  | "confirmation"
+  | "profile";
 
 interface BookingData {
   firstName?: string;
@@ -56,9 +59,20 @@ export default function App() {
   const [bookingId, setBookingId] = useState<string | null>(null);
   const [authToken, setAuthToken] = useState<string | null>(getToken);
   const [authUser, setAuthUser] = useState<AuthUser | null>(getUser);
+  const [profile, setProfile] = useState<Profile | null>(null);
+
+  // Load saved profile whenever we have a token (fresh login or returning session).
+  function loadProfile(token: string) {
+    api.get("/api/profile", token)
+      .then((p: Profile) => setProfile(p))
+      .catch(() => setProfile(null));
+  }
 
   useEffect(() => {
-    if (authToken) setScreen("booking-form");
+    if (authToken) {
+      loadProfile(authToken);
+      setScreen("booking-form");
+    }
   }, []);
 
   const total = calcTotal(bookingData.startDate, bookingData.startTime, bookingData.endDate, bookingData.endTime);
@@ -68,10 +82,12 @@ export default function App() {
     setUser(user);
     setAuthToken(token);
     setAuthUser(user);
+    loadProfile(token);
     setScreen("booking-form");
   }
 
   function handleGuest() {
+    setProfile(null);
     setScreen("booking-form");
   }
 
@@ -79,6 +95,7 @@ export default function App() {
     clearToken();
     setAuthToken(null);
     setAuthUser(null);
+    setProfile(null);
     setScreen("login");
   }
 
@@ -102,12 +119,23 @@ export default function App() {
           <BookingFormScreen
             onBack={authToken ? handleLogout : () => setScreen("login")}
             authUser={authUser}
+            profile={profile}
+            token={authToken}
+            onOpenProfile={authToken ? () => setScreen("profile") : undefined}
+            onProfileSaved={(p) => setProfile(p)}
             onContinue={(data, id) => {
               setBookingData(data);
               setBookingId(id);
               setScreen("booking-summary");
             }}
+          />
+        )}
+        {screen === "profile" && (
+          <ProfileScreen
+            onBack={() => setScreen("booking-form")}
             token={authToken}
+            initialProfile={profile}
+            onSaved={(p) => setProfile(p)}
           />
         )}
         {screen === "booking-summary" && (
@@ -134,25 +162,13 @@ export default function App() {
           />
         )}
         {screen === "payment-venmo" && (
-          <VenmoPaymentScreen
-            onBack={() => setScreen("booking-summary")}
-            onPay={() => setScreen("confirmation")}
-            total={total}
-          />
+          <VenmoPaymentScreen onBack={() => setScreen("booking-summary")} onPay={() => setScreen("confirmation")} total={total} />
         )}
         {screen === "payment-cashapp" && (
-          <CashAppPaymentScreen
-            onBack={() => setScreen("booking-summary")}
-            onPay={() => setScreen("confirmation")}
-            total={total}
-          />
+          <CashAppPaymentScreen onBack={() => setScreen("booking-summary")} onPay={() => setScreen("confirmation")} total={total} />
         )}
         {screen === "payment-zelle" && (
-          <ZellePaymentScreen
-            onBack={() => setScreen("booking-summary")}
-            onPay={() => setScreen("confirmation")}
-            total={total}
-          />
+          <ZellePaymentScreen onBack={() => setScreen("booking-summary")} onPay={() => setScreen("confirmation")} total={total} />
         )}
         {screen === "confirmation" && (
           <ConfirmationScreen

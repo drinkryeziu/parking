@@ -11,8 +11,24 @@ export const api = {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || "Request failed");
+      const err = await res.json().catch(() => ({ error: `Request failed (HTTP ${res.status})` }));
+      throw new Error(err.error || `Request failed (HTTP ${res.status})`);
+    }
+    return res.json();
+  },
+
+  async put(path: string, body: unknown, token?: string) {
+    const res = await fetch(`${BASE}${path}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `Request failed (HTTP ${res.status})` }));
+      throw new Error(err.error || `Request failed (HTTP ${res.status})`);
     }
     return res.json();
   },
@@ -21,7 +37,10 @@ export const api = {
     const res = await fetch(`${BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) throw new Error("Request failed");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `Request failed (HTTP ${res.status})` }));
+      throw new Error(err.error || `Request failed (HTTP ${res.status})`);
+    }
     return res.json();
   },
 };

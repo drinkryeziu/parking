@@ -15,6 +15,13 @@ model User {
   phone     String?
   password  String?  // null for Google OAuth users
   googleId  String?  @unique
+
+  // Saved trailer/company profile — captured from first booking, reused after
+  companyName   String?
+  trailerType   String?
+  trailerNumber String?
+  licensePlate  String?
+
   createdAt DateTime @default(now())
   bookings  Booking[]
 }

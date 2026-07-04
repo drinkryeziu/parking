@@ -5,6 +5,17 @@ export interface AuthUser {
   lastName: string;
 }
 
+export interface Profile {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  companyName: string;
+  trailerType: string;
+  trailerNumber: string;
+  licensePlate: string;
+}
+
 export function getToken(): string | null {
   return localStorage.getItem("parking_token");
 }

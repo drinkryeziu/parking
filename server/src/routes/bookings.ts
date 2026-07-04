@@ -1,22 +1,11 @@
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { PrismaClient } from "@prisma/client";
-import jwt from "jsonwebtoken";
+import { getUserId } from "../auth-middleware";
 
 const router = Router();
 const prisma = new PrismaClient();
 
-function getUserId(req: any): string | null {
-  const auth = req.headers.authorization;
-  if (!auth) return null;
-  try {
-    const payload = jwt.verify(auth.replace("Bearer ", ""), process.env.JWT_SECRET!) as any;
-    return payload.userId;
-  } catch {
-    return null;
-  }
-}
-
-router.post("/", async (req, res) => {
+router.post("/", async (req: Request, res: Response) => {
   const {
     firstName, lastName, phone, email, companyName,
     trailerType, trailerNumber, licensePlate,
@@ -46,10 +35,19 @@ router.post("/", async (req, res) => {
     },
   });
 
+  // For logged-in drivers, remember their trailer/company details so the
+  // next booking is pre-filled (captured from first booking).
+  if (userId) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { phone, companyName, trailerType, trailerNumber, licensePlate },
+    }).catch(() => { /* non-fatal: booking already saved */ });
+  }
+
   res.json({ bookingId: booking.id });
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", async (req: Request, res: Response) => {
   const booking = await prisma.booking.findUnique({ where: { id: req.params.id } });
   if (!booking) return res.status(404).json({ error: "Not found" });
   res.json(booking);

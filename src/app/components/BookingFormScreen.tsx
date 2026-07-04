@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { ChevronDown, Calendar, Clock, ArrowLeft, MapPin } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronDown, Calendar, Clock, ArrowLeft, MapPin, User } from "lucide-react";
 import { api } from "../../lib/api";
-import { AuthUser } from "../../lib/auth";
+import { AuthUser, Profile } from "../../lib/auth";
 
 interface BookingData {
   firstName: string;
@@ -25,7 +25,13 @@ interface Props {
   onContinue: (data: BookingData, bookingId: string) => void;
   authUser?: AuthUser | null;
   token?: string | null;
+  profile?: Profile | null;
+  onOpenProfile?: () => void;
+  onProfileSaved?: (p: Profile) => void;
 }
+
+// Fields that belong to the saved driver profile (vs per-booking fields like dates).
+const PROFILE_KEYS = ["firstName", "lastName", "phone", "companyName", "trailerType", "trailerNumber", "licensePlate"] as const;
 
 type ErrorMap = Partial<Record<keyof BookingData, string>>;
 
@@ -94,7 +100,7 @@ function inputClass(error?: string) {
   }`;
 }
 
-export function BookingFormScreen({ onBack, onContinue, authUser, token }: Props) {
+export function BookingFormScreen({ onBack, onContinue, authUser, token, profile, onOpenProfile, onProfileSaved }: Props) {
   const [submittingApi, setSubmittingApi] = useState(false);
   const [apiError, setApiError] = useState("");
 
@@ -118,10 +124,70 @@ export function BookingFormScreen({ onBack, onContinue, authUser, token }: Props
   const [errors, setErrors] = useState<ErrorMap>({});
   const [submitted, setSubmitted] = useState(false);
 
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Pre-fill the form from the saved profile when it loads (returning driver).
+  useEffect(() => {
+    if (!profile) return;
+    setData(prev => ({
+      ...prev,
+      firstName: profile.firstName || prev.firstName,
+      lastName: profile.lastName || prev.lastName,
+      email: profile.email || prev.email,
+      phone: profile.phone || prev.phone,
+      companyName: profile.companyName || prev.companyName,
+      trailerType: profile.trailerType || prev.trailerType,
+      trailerNumber: profile.trailerNumber || prev.trailerNumber,
+      licensePlate: profile.licensePlate || prev.licensePlate,
+    }));
+  }, [profile]);
+
   const set = (k: keyof BookingData, v: string | boolean) => {
     const next = { ...data, [k]: v };
     setData(next);
     if (submitted) setErrors(validate(next));
+  };
+
+  // A profile is "established" once trailer/company details have been saved
+  // (i.e. after the first booking). Only then do we offer Save/Cancel on edits —
+  // a first-time driver just fills the form and taps Continue.
+  const hasSavedProfile = !!profile && !!(profile.trailerNumber || profile.trailerType || profile.companyName);
+  const profileDirty = hasSavedProfile && PROFILE_KEYS.some(k => (data[k] || "") !== ((profile as any)[k] || ""));
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    setApiError("");
+    try {
+      const updated = await api.put("/api/profile", {
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        companyName: data.companyName,
+        trailerType: data.trailerType,
+        trailerNumber: data.trailerNumber,
+        licensePlate: data.licensePlate,
+      }, token ?? undefined);
+      onProfileSaved?.(updated);
+    } catch (err: any) {
+      setApiError(err.message || "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleCancelProfile = () => {
+    if (!profile) return;
+    setData(prev => ({
+      ...prev,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      phone: profile.phone,
+      companyName: profile.companyName,
+      trailerType: profile.trailerType,
+      trailerNumber: profile.trailerNumber,
+      licensePlate: profile.licensePlate,
+    }));
+    setApiError("");
   };
 
   const summary = calcSummary(data.startDate, data.startTime, data.endDate, data.endTime);
@@ -163,9 +229,16 @@ export function BookingFormScreen({ onBack, onContinue, authUser, token }: Props
           <h1 style={{ fontFamily: "'Advent Pro', sans-serif", fontVariationSettings: '"wdth" 100', fontSize: "26px", fontWeight: 700, color: "#007AFF", lineHeight: 1 }}>PARKING</h1>
           <p className="text-gray-500" style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px" }}>Booking Information</p>
         </div>
-        <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-full">
-          <MapPin size={12} color="#007AFF" />
-          <span className="text-blue-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", fontWeight: 600 }}>Sweetwater Lot A</span>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-full">
+            <MapPin size={12} color="#007AFF" />
+            <span className="text-blue-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "12px", fontWeight: 600 }}>Sweetwater Lot A</span>
+          </div>
+          {onOpenProfile && (
+            <button onClick={onOpenProfile} className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 active:opacity-80" aria-label="My profile">
+              <User size={16} color="white" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -426,19 +499,41 @@ export function BookingFormScreen({ onBack, onContinue, authUser, token }: Props
             <p className="text-red-600" style={{ fontFamily: "'Inter', sans-serif", fontSize: "13px" }}>{apiError}</p>
           </div>
         )}
-        <button
-          onClick={handleContinue}
-          disabled={submittingApi}
-          className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70"
-          style={{ background: "#007AFF", fontFamily: "'Inter', sans-serif", fontSize: "16px", fontWeight: 700 }}
-        >
-          {submittingApi ? (
-            <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
-            </svg>
-          ) : "Continue"}
-        </button>
+        {profileDirty ? (
+          <>
+            {/* Driver edited saved details — offer to save the profile update */}
+            <button
+              onClick={handleSaveProfile}
+              disabled={savingProfile}
+              className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70"
+              style={{ background: "#024ad8", fontFamily: "'Inter', sans-serif", fontSize: "16px", fontWeight: 700 }}
+            >
+              {savingProfile ? (
+                <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
+              ) : "Save"}
+            </button>
+            <button onClick={handleCancelProfile} className="w-full mt-2 text-gray-500" style={{ fontFamily: "'Inter', sans-serif", fontSize: "14px", fontWeight: 500 }}>
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={handleContinue}
+            disabled={submittingApi}
+            className="w-full h-14 rounded-xl text-white transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-70"
+            style={{ background: "#007AFF", fontFamily: "'Inter', sans-serif", fontSize: "16px", fontWeight: 700 }}
+          >
+            {submittingApi ? (
+              <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+              </svg>
+            ) : "Continue"}
+          </button>
+        )}
       </div>
     </div>
   );

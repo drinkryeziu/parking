@@ -3,6 +3,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth";
 import bookingRoutes from "./routes/bookings";
 import paymentRoutes from "./routes/payments";
+import profileRoutes from "./routes/profile";
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/profile", profileRoutes);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
